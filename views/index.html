@@ -1,0 +1,288 @@
+{% extends 'layout.html' %}
+
+{% block title %}Your Trip{% endblock %}
+
+{% block content %}
+<div id="app" class="clearfix">
+  <div class="map-container col-sm-8 col-lg-9">
+    <div>
+      <div id="map-canvas"></div>
+    </div>
+  </div>
+  <div id="control-panel" class="col-sm-4 col-lg-3 clearfix">
+    <div class="col-xs-6 col-sm-12">
+      <div class="panel panel-default">
+        <div class="panel-body" id="options-panel">
+
+        </div>
+      </div>
+    </div>
+    <div class="col-xs-6 col-sm-12">
+      <h3>
+        <span id="day-title">
+          <span>Day 2</span>
+          <button class="btn btn-xs btn-danger remove btn-circle">x</button>
+        </span>
+      </h3>
+      <div class="panel panel-default">
+        <div class="panel-heading" id='day-chooser'>
+          
+        </div>
+        <div class="panel-body" id="itinerary">
+          <!-- <div>
+            <h4>My Hotel</h4>
+            <ul class="list-group">
+              <div class="itinerary-item">
+                <span class="title">Andaz Wall Street</span>
+                <button class="btn btn-xs btn-danger remove btn-circle">x</button>
+              </div>
+            </ul>
+          </div> -->
+          <!-- <div>
+            <h4>My Restaurants</h4>
+            <ul class="list-group">
+              <div class="itinerary-item">
+                <span class="title">Bouley</span>
+                <button class="btn btn-xs btn-danger remove btn-circle">x</button>
+              </div>
+            </ul>
+          </div> -->
+          <!-- <div>
+            <h4>My Activities</h4>
+            <ul class="list-group">
+              <div class="itinerary-item">
+                <span class="title">Mahayana Buddhist Temple Association</span>
+                <button class="btn btn-xs btn-danger remove btn-circle">x</button>
+              </div>
+            </ul>
+          </div> -->
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+
+
+  var AppState = {
+    hotels: [],
+    restaurants: [],
+    activities: [],
+    days: {
+      1: dayMaker(1)
+    },
+    maxDayNum: 1,
+    currentDay: 1
+  };
+
+  function dayMaker(dayNum) {
+    return {
+      dayNum: dayNum,
+      hotels: [],
+      restaurants: [],
+      activities: []
+    };
+  }
+
+  var Actions = {
+    currentDay: {
+      set: function(num) {
+        AppState.currentDay = num;
+      }
+    },
+    maxDayNum: {
+      increment: function() {
+        return ++AppState.maxDayNum;
+      }
+    },
+    days: {
+      add: function() {
+        var dayNum = Actions.maxDayNum.increment();
+        var day = dayMaker(dayNum);
+        AppState.days[dayNum] = day
+        return day;
+      },
+      addItineraryItem: function(dayNum, type, itineraryItem) {
+        AppState.days[dayNum][type].push(itineraryItem.id);
+      }
+    }
+  };
+
+
+  var Components = {
+
+    AddDayBtn: function() {
+      return $(`
+        <button class="btn btn-circle day-btn" id="day-add">
+          +
+        </button>`)
+        .on('click', function() {
+          // robot care
+          var day = Actions.days.add();
+
+          // human care
+          renderDays();
+        });
+    },
+
+    DayBtn: function(day) {
+      return $(
+        `<button class="btn btn-circle day-btn">
+          ${day.dayNum}
+         </button>`
+        )
+        .addClass(
+          day.dayNum === AppState.currentDay 
+            && 
+          'current-day'
+        )
+        .on('click', function() {
+          // caring for robot
+          Actions.currentDay.set(day.dayNum);
+
+          // care for human
+          renderDays();
+        });
+    },
+
+    DayChooser: function(daysObj) {
+      return Object.values(daysObj)
+        .reduce(function(div, day) {
+          div.append(Components.DayBtn(day));
+          return div;
+        }, $(`<div/>`))
+        .prepend(Components.AddDayBtn())
+    },
+
+    DayPanel: function(day) {
+      return $('<div/>')
+        .append('<h4>My Hotels</h4>')
+        .append(Components.IternaryItemList(day.hotels, 'hotels'))
+        .append('<h4>My Restaurants</h4>')
+        .append(Components.IternaryItemList(day.restaurants, 'restaurants'))
+        .append('<h4>My Activities</h4>')
+        .append(Components.IternaryItemList(day.activities, 'activities'))
+    },
+
+    AddItineraryItemBtn: function(type, select) {
+      return $(`<button 
+                  data-action="add" 
+                  class="btn btn-primary btn-circle pull-right">
+                    +
+                </button>`)
+              .on('click', function() {
+                // care for robot
+
+                var itineraryItem = AppState[type][select.val()];
+                Actions.days.addItineraryItem(AppState.currentDay, type, itineraryItem);
+                console.log("ITINERARY ITEM",itineraryItem)
+
+                $.post(`/api/days/${AppState.currentDay}/${type}`, {
+                  day: AppState.currentDay,
+                  name: itineraryItem.name
+                  })
+
+                // human care
+                renderDays();
+              })
+    },
+
+    ItineraryItemChooser: function(type) { // type eg 'hotels'
+      var select = Components.ItinerarySelect(AppState[type]);
+      var container = $(`<div/>`);
+      container.append(`<h4>${type}</h4>`);
+      container.append(select);
+      container.append(Components.AddItineraryItemBtn(type, select))
+      return container;
+    },
+
+    IternaryItemList: function(itineraryItems, type) {
+      return itineraryItems.reduce(function(ul, it) {
+        ul.append(Components.DayPanelItineraryItem(it, type));
+        return ul;
+      }, $('<ul/>'));
+    },
+
+    DayPanelItineraryItem: function(id, type) {
+      var itineraryItem = AppState[type][id];
+      return $(`<li>${itineraryItem.name}</li>`);
+    },
+
+    ItineraryOption: function(itineraryItem) {
+      return $(
+        `<option value="${itineraryItem.id}">
+          ${itineraryItem.name}
+        </option>`);
+    },
+    ItinerarySelect: function(itineraryItems) {
+      return Object.values(itineraryItems)
+        .reduce(function(select, iternaryItem) {
+          return select
+            .append(Components.ItineraryOption(iternaryItem));
+        }, $('<select/>'))
+    }
+    
+  };
+
+  function renderDays() {
+    $('#day-chooser')
+      .empty()
+      .append(Components.DayChooser(AppState.days));  
+
+    $('#itinerary')
+      .empty()
+      .append(Components.DayPanel(AppState.days[AppState.currentDay]))
+
+    map.clearMarkers();
+
+    AppState.days[AppState.currentDay].restaurants.forEach(function(rid) {
+      map.drawMarker('restaurants', AppState.restaurants[rid].place.location)
+    })
+
+    AppState.days[AppState.currentDay].hotels.forEach(function(rid) {
+      map.drawMarker('hotels', AppState.hotels[rid].place.location)
+    })
+
+    AppState.days[AppState.currentDay].activities.forEach(function(rid) {
+      map.drawMarker('activities', AppState.activities[rid].place.location)
+    })
+  }
+
+
+  var $optionsPanel = $('#options-panel');
+
+
+$.get('/api/restaurants')
+.then(function (restaurants) {
+    AppState.restaurants = restaurants;
+      $optionsPanel.append(Components.ItineraryItemChooser('restaurants'));
+});
+
+$.get('/api/hotels')
+.then(function (hotels) {
+    AppState.hotels = hotels;
+      $optionsPanel.append(Components.ItineraryItemChooser('hotels'));
+});
+
+$.get('/api/activities')
+.then(function (activities) {
+    AppState.activities = activities;
+      $optionsPanel.append(Components.ItineraryItemChooser('activities'));
+})
+  
+.catch( console.error.bind(console) );
+
+
+    
+  renderDays();
+
+
+
+
+
+</script>
+
+
+
+{% endblock %}
